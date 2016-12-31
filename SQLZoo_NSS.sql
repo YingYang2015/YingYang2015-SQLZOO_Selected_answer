@@ -1,6 +1,7 @@
 ## SQLZOO_NSS
 
 # Question 8
+# Show the institution, the total sample size and the number of computing students for institutions in Manchester for 'Q01'. 
 select institution, sum(sample), sum(case when subject = '(8) Computer Science' then sample else 0 end) 
 from nss
 where question = 'Q01' and institution like '%Manchester%' 
