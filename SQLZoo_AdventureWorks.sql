@@ -137,3 +137,101 @@ from SalesOrderHeader) as T
 group by T.Range
 
 #15. Identify the three most important cities. Show the break down of top level product category against city.
+
+select T1.City, T1.TotalSales, T2.Name, T2.ProductSales
+from
+	(select @row_num := @row_num + 1 as row, City, TotalSales
+	from
+		(select A.City, sum(S.SubTotal) as TotalSales
+		from CustomerAddress CA join Address A on CA.AddressID = A.AddressID
+			 join SalesOrderHeader S on CA.CustomerID = S.CustomerID
+		group by  A.City  
+		order by sum(S.SubTotal) Desc) as T,
+		(select @row_num := 0) as R) as T1
+join 
+(select City, ProductID, Name, ProductSales, 
+	   @rank := case when @current_city = City then @rank + 1 else 1 end as rank,
+       @current_city := City
+from (select A.City, SD.ProductID, P.Name, sum(OrderQty*UnitPrice) as ProductSales
+		from CustomerAddress CA join Address A on CA.AddressID = A.AddressID
+			 join SalesOrderHeader S on CA.CustomerID = S.CustomerID
+             join SalesOrderDetail SD on S.SalesOrderID = SD.SalesOrderID
+             join Product P on SD.ProductID = P.ProductID
+		group by A.City, SD.ProductID, P.Name
+        order by A.City, sum(OrderQty*UnitPrice) Desc) as T3, (select @rank := 0) as R2) as T2 
+        on T1.City = T2.City
+where row <= 3 and rank = 1
+
+### Simulated test
+use sqlzoo;
+drop table if exists AdventureWorks;
+create table AdventureWorks(
+City varchar(50),
+ProductID int,
+Name varchar(50),
+ProductSales decimal
+);
+
+insert into AdventureWorks value('Abingdon', 875, 'Racing Socks, L', 37.73);
+insert into AdventureWorks value('Alhambra', 875, 'Racing Socks, L', 72.94);
+insert into AdventureWorks value('Alhambra', 874, 'Racing Socks, M', 21.56);
+insert into AdventureWorks value('Alhambra', 870, 'Water Bottle - 30 oz.', 2.99);
+
+select * from AdventureWorks；
+
+select City, ProductID, Name, ProductSales, 
+	   @rank := case when @current_city = City then @rank + 1 else 1 end as rank,
+       @current_city := City
+from AdventureWorks, (select @rank := 1) as R2
+
+############### Resit Questions
+# 1.List the SalesOrderNumber for the customer 'Good Toys' 'Bike World'
+select SalesOrderID
+from Customer C join SalesOrderHeader S on C.CustomerID = S.CustomerID
+where CompanyName in ('Good Toys', 'Bike World')
+
+# 2. List the ProductName and the quantity of what was ordered by 'Futuristic Bikes'
+Select Name, OrderQty
+from Customer C join SalesOrderHeader SH on C.CustomerID = SH.CustomerID
+                join SalesOrderDetail SD on SH.SalesOrderID = SD.SalesOrderID
+                join Product P on SD.ProductID = P.ProductID
+where CompanyName = 'Futuristic Bikes'
+
+# 3.List the name and addresses of companies containing the word 'Bike' (upper or lower case) and companies containing 'cycle' (upper or lower case). 
+#   Ensure that the 'bike's are listed before the 'cycles's. 
+select CompanyName
+from Customer C join CustomerAddress CA on C.CustomerID = CA.CustomerID
+                join Address A on CA.AddressID = A.AddressID
+where CompanyName like '%Bike%' or '%bike%'
+union
+select CompanyName
+from Customer C join CustomerAddress CA on C.CustomerID = CA.CustomerID
+                join Address A on CA.AddressID = A.AddressID
+where CompanyName like '%cycle%' or '%Cycle%'
+
+# 4.Show the total order value for each CountryRegion. List by value with the highest first.
+select CountyRegion, sum(SubTotal)
+from CustomerAddress CA join Address A join SalesOrderHeader SH on
+     CA.AddressID = A.AddressID and CA.CustomerID = SH.CustomerID
+group by CountyRegion
+order by sum(SubTotal) DESC
+
+
+# 5.Find the best customer in each region.
+# else, we can use rank
+
+select *
+from (select CountyRegion, CA.CustomerID, sum(SubTotal) as total
+from CustomerAddress CA join Address A join SalesOrderHeader SH on
+     CA.AddressID = A.AddressID and CA.CustomerID = SH.CustomerID
+group by CountyRegion, CustomerID
+order by CountyRegion, sum(SubTotal) DESC) as T1
+where T1.CountyRegion in (select CountyRegion 
+						  from (select CountyRegion, CA.CustomerID, sum(SubTotal) as total
+								from CustomerAddress CA join Address A join SalesOrderHeader SH on
+									 CA.AddressID = A.AddressID and CA.CustomerID = SH.CustomerID
+								group by CountyRegion, CustomerID
+								order by CountyRegion, sum(SubTotal) DESC) as T2
+						  group by CountyRegion 
+					      having T1.total = max(T2.total)
+)
